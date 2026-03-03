@@ -122,6 +122,21 @@ export default function App() {
   const [contactMethod, setContactMethod] = useState<'email' | 'discord'>('email');
   const [isEmailFocused, setIsEmailFocused] = useState(false);
 
+  const [showWinnerModal, setShowWinnerModal] = useState(false);
+  const [claimStep, setClaimStep] = useState<'announce' | 'form' | 'success'>('announce');
+  const [claimForm, setClaimForm] = useState({ name: '', contact: '', projectType: '', details: '' });
+  const [isClaimSubmitting, setIsClaimSubmitting] = useState(false);
+
+  useEffect(() => {
+    const hasClaimed = localStorage.getItem('freeGraphicClaimed');
+    if (hasClaimed) return;
+
+    // 2% chance to win on any page load (set to 1 for testing)
+    if (Math.random() < 0.02) {
+      setTimeout(() => setShowWinnerModal(true), 2000);
+    }
+  }, []);
+
   // Prevent scrolling when modal is open
   useEffect(() => {
     if (selectedProject) {
@@ -160,6 +175,51 @@ export default function App() {
       }
     } catch (err) {
       console.error("Error sharing:", err);
+    }
+  };
+
+  const handleClaimSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!claimForm.projectType) {
+      alert("Please select a project type.");
+      return;
+    }
+
+    setIsClaimSubmitting(true);
+    const webhookUrl = import.meta.env.VITE_DISCORD_WEBHOOK_URL;
+
+    if (!webhookUrl) {
+      console.error("Discord webhook URL is not configured.");
+      setIsClaimSubmitting(false);
+      return;
+    }
+
+    const payload = {
+      embeds: [{
+        title: "🎉 FREE GRAPHIC CLAIMED 🎉",
+        color: 5763719, // Green
+        fields: [
+          { name: "👤 Name", value: claimForm.name, inline: true },
+          { name: "📞 Contact", value: claimForm.contact, inline: true },
+          { name: "📁 Project Type", value: claimForm.projectType, inline: true },
+          { name: "📝 Details", value: claimForm.details }
+        ],
+        timestamp: new Date().toISOString()
+      }]
+    };
+
+    try {
+      await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      setClaimStep('success');
+      localStorage.setItem('freeGraphicClaimed', 'true');
+    } catch (error) {
+      console.error(error);
+    } finally {
+      setIsClaimSubmitting(false);
     }
   };
 
@@ -671,6 +731,117 @@ export default function App() {
           </motion.div>
         </div>
       )}
+
+      {/* Winner Modal */}
+      <AnimatePresence>
+        {showWinnerModal && (
+          <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 md:p-12">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              className="absolute inset-0 bg-ink/90 backdrop-blur-md"
+            />
+            
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-xl bg-ink border border-racing-red/30 shadow-2xl shadow-racing-red/10 overflow-hidden p-8 md:p-12"
+            >
+              <button 
+                onClick={() => setShowWinnerModal(false)}
+                className="absolute top-4 right-4 z-10 p-2 text-white/50 hover:text-white transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+
+              {claimStep === 'announce' && (
+                <div className="text-center">
+                  <div className="text-6xl mb-6">🎉</div>
+                  <h3 className="text-3xl md:text-4xl font-medium tracking-tight mb-4 text-white">
+                    YOU WON A FREE GRAPHIC!
+                  </h3>
+                  <p className="text-white/60 font-light leading-relaxed mb-8">
+                    As a thank you for checking out my portfolio, I'm giving away one free design project today. You're the lucky winner!
+                  </p>
+                  <button
+                    onClick={() => setClaimStep('form')}
+                    className="w-full py-4 bg-racing-red text-white font-mono text-sm uppercase tracking-widest hover:bg-white hover:text-racing-red transition-colors duration-300"
+                  >
+                    Claim Now
+                  </button>
+                </div>
+              )}
+
+              {claimStep === 'form' && (
+                <div>
+                  <h3 className="text-2xl font-medium tracking-tight mb-6 text-white">
+                    Claim Your Free Graphic
+                  </h3>
+                  <form className="flex flex-col gap-6" onSubmit={handleClaimSubmit}>
+                    <input 
+                      type="text" 
+                      placeholder="Name" 
+                      value={claimForm.name}
+                      onChange={(e) => setClaimForm({ ...claimForm, name: e.target.value })}
+                      className="w-full bg-transparent border-b border-white/20 py-3 text-white placeholder-white/30 focus:outline-none focus:border-racing-red transition-colors" 
+                      required 
+                    />
+                    <input 
+                      type="text" 
+                      placeholder="Email or Discord Username" 
+                      value={claimForm.contact}
+                      onChange={(e) => setClaimForm({ ...claimForm, contact: e.target.value })}
+                      className="w-full bg-transparent border-b border-white/20 py-3 text-white placeholder-white/30 focus:outline-none focus:border-racing-red transition-colors" 
+                      required 
+                    />
+                    <CustomSelect 
+                      value={claimForm.projectType}
+                      onChange={(val) => setClaimForm({ ...claimForm, projectType: val })}
+                      options={['Brand Identity', 'Streamer Graphics', 'Poster / Editorial', 'Merchandise', 'Other']}
+                      placeholder="Project Type"
+                    />
+                    <textarea 
+                      placeholder="Project Details & Ideas" 
+                      rows={3} 
+                      value={claimForm.details}
+                      onChange={(e) => setClaimForm({ ...claimForm, details: e.target.value })}
+                      className="w-full bg-transparent border-b border-white/20 py-3 text-white placeholder-white/30 focus:outline-none focus:border-racing-red transition-colors resize-none" 
+                      required
+                    ></textarea>
+                    <button 
+                      type="submit" 
+                      disabled={isClaimSubmitting}
+                      className="w-full py-4 bg-racing-red text-white font-mono text-sm uppercase tracking-widest hover:bg-white hover:text-racing-red transition-colors duration-300 disabled:opacity-50"
+                    >
+                      {isClaimSubmitting ? 'Submitting...' : 'Submit Claim'}
+                    </button>
+                  </form>
+                </div>
+              )}
+
+              {claimStep === 'success' && (
+                <div className="text-center py-8">
+                  <CheckCircle2 className="w-16 h-16 text-emerald-400 mx-auto mb-6" />
+                  <h3 className="text-2xl font-medium tracking-tight mb-4 text-white">
+                    Claim Successful!
+                  </h3>
+                  <p className="text-white/60 font-light leading-relaxed mb-8">
+                    I've received your project details and will be in touch with you shortly to get started on your free graphic.
+                  </p>
+                  <button
+                    onClick={() => setShowWinnerModal(false)}
+                    className="px-8 py-3 bg-white/5 hover:bg-white/10 text-white font-mono text-xs uppercase tracking-widest transition-colors duration-300 border border-white/10"
+                  >
+                    Close
+                  </button>
+                </div>
+              )}
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
